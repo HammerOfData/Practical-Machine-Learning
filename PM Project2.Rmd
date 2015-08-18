@@ -1,0 +1,162 @@
+---
+title: "Pratical Machine Learning - Project"
+author: "HammerOfData"
+date: "Monday, August 17, 2015"
+output: html_document
+---
+
+## Introduction
+In a study by Velloso et al 6 participants performed Unilateral Dumbell Biceps Curl in five different fashions; one correctly performed (label A) and four where they were instructed to make certain classical mistakes (labeled B, C, D and E). While performing the exercise the participants were wearing different sensors from which different measures were calculated. 
+The following report uses the data from this study to build a model that can predict which class a certain exercise belongs based on the deriviated calculations of the sensor data. After having found an appropriate model, it is tested against 20 unlabeled observations and submitted to page that will return whether the predictions are correct.
+
+## Load data
+
+Load the relevant libraries
+
+```{r}
+# Load libraries
+library(ggplot2)
+library(lattice)
+library(caret)
+library(randomForest)
+
+```
+
+The training data is download from https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv and the test data is downloaded from https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv.
+
+Load the training and test data
+
+```{r}
+# Set the working directory 
+setwd("N:/Projects/Coursera/Course 8 - Pratical Machine Learning")
+
+# Load training set
+training <- read.csv("pml-training.csv")
+dim(training)
+
+# Load test set
+test <- read.csv("pml-testing.csv")
+dim(test)
+
+```
+
+## Data Partition
+
+Split the data into a training set using 80% of the data and set a side 20% for validation - data never used to determine which model to choose.
+
+
+```{r}
+# Set the seed for reproducibility
+set.seed(911)
+
+# Sample 80% of the data for training
+inTrain = createDataPartition(training$classe, p = 0.8)[[1]]
+
+# Training set (80%)
+train = training[ inTrain,]
+
+# Validation set (20%)
+validation= training[-inTrain,]
+
+
+```
+
+## Data Cleaning
+The following strategy are applied to clean the data:
+
+1. Remove variables with more than 10% missing values and impute the rest with k-means algorithm.
+2. Remove variables related to timestamps, windows and counters
+3. Remove none numeric variables.
+
+
+```{r}
+# 1. Remove variables with more than 10% missing values
+RemoveIndex1 <-  colSums(is.na(train))<dim(train)[1]*0.9
+train_clean1 <- train[,RemoveIndex1]
+# OBS: No variables left with missing values after the above, so no need to impute
+
+# Remove the same variables in the validation set
+val_clean1 <- validation[,RemoveIndex1]
+
+# 2. Remove variables related to timestamps, windows and counters
+RemoveIndex2 <- grepl("timestamp|window|X", names(train_clean1))
+train_clean2 <- train_clean1 [,!RemoveIndex2]
+
+# Remove the same variables in the validation set
+val_clean2 <- val_clean1[,!RemoveIndex2]
+
+# 3. Remove none numeric variables.
+classetrain <- train$classe # Save the class labels
+classevalidation <- validation$classe # Save the class labels
+
+RemoveIndex3 <- sapply(train_clean2,is.numeric)
+train_clean3 <- train_clean2[,RemoveIndex3]
+
+# Remove the same variables in the validation set
+val_clean3 <- val_clean2[,RemoveIndex3]
+
+# Final clean data sets
+train_clean <- train_clean3
+train_clean$classe <- classetrain
+
+val_clean <- val_clean3
+val_clean$classe <- classevalidation
+
+```
+
+## Data Modelling
+Having briefly read the study "Qualitative Activity Recognition of Weight Lifting Exercises" by Velloso et al. it was decided to build a Random Forest model for classification as this model seems to produce good results with this kind of sensor data since it can handle the characteristic noise. The sample error is estimated using 10-fold cross validation since this will give an assessment on how well the model will generalize to independent data sets.
+
+
+```{r}
+# Perform 10-fold cross validation
+fitControl <- trainControl(method="cv",number=10)
+  
+# Train a Random Forest model on the training data
+load("RF_fit.RData") # Load an object created from the code below for speed
+#RF_fit <- train(classe ~ ., data = train_clean,method = "rf",trControl = fitControl,allowParallel=TRUE)
+
+```
+
+## Model Evaluation
+
+Lets evaluate the model
+
+```{r}
+# Print out the model
+print(RF_fit)
+
+```
+
+The accuracy is 99.27% for the best model with a standard deviation of 0.2%.
+
+Lets have a look at the confusion matrix
+```{r}
+# Plot the
+confusionMatrix.train(RF_fit,norm="overall")
+
+```
+
+The classes the model seems to have the hardest to seperate is the C and D classes. It perform perfectly on the class E.
+
+The model seems to be extremely good and I find no reason to test other types of models.
+
+Lets asses the accuracy of the validation set, which has not been involved with the model building.
+
+```{r}
+# Use model to perform classification on the validation set
+pred_fit_RF <- predict(RF_fit,newdata=val_clean)
+
+# Calculate the accuracy
+sum(pred_fit_RF==val_clean$classe)/length(val_clean$classe)
+```
+
+The accuracy for the valication set is 99.54%, hence the classification error is 0.46%.
+
+## Conclusion
+
+The accuracy of the best model using 10-fold cross validation is 99.27% for the best model with a standard deviation of 0.2%.
+The classification error is 0.46% for the validation set.
+Applying the model to the test data and submitting the result to the course webpage showed 100% accuaray.
+
+
